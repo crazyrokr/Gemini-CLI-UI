@@ -87,6 +87,7 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { generateSetupToken, getSetupToken } from './utils/setupToken.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -1440,6 +1441,18 @@ async function startServer() {
     await initializeDatabase();
     // console.log('✅ Database initialization skipped (testing)');
     
+    const hasUsers = await (await import('./database/db.js')).userDb.hasUsers();
+    if (!hasUsers) {
+      const token = generateSetupToken();
+      console.log('\n' + '='.repeat(60));
+      console.log('  SETUP TOKEN (first-time registration)');
+      console.log('  Use this token in the X-Setup-Token header');
+      console.log('  when calling POST /api/auth/register');
+      console.log('');
+      console.log(`  ${token}`);
+      console.log('='.repeat(60) + '\n');
+    }
+
     server.listen(PORT, '0.0.0.0', async () => {
       // console.log(`Gemini CLI UI server running on http://0.0.0.0:${PORT}`);
       
