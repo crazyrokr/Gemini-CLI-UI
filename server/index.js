@@ -88,6 +88,7 @@ import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { generateSetupToken, getSetupToken } from './utils/setupToken.js';
+import { auditLog } from './utils/auditLog.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -888,7 +889,9 @@ wss.on('connection', (ws, request) => {
   // Parse URL to get pathname without query parameters
   const urlObj = new URL(url, 'http://localhost');
   const pathname = urlObj.pathname;
-  
+
+  ws._user = request.user;
+
   if (pathname === '/shell') {
     handleShellConnection(ws);
   } else if (pathname === '/ws') {
@@ -964,6 +967,14 @@ function handleShellConnection(ws) {
         const hasSession = data.hasSession;
         const shellType = data.shellType || 'standard';
         const clientShellPath = data.shellPath; // Specific shell path from UI
+
+        auditLog('shell_session_start', {
+          userId: ws._user?.userId,
+          username: ws._user?.username,
+          projectPath,
+          sessionId,
+          shellType
+        });
         
         // Use appropriate shell for the platform
         const isWindows = os.platform() === 'win32';
@@ -1134,6 +1145,11 @@ function handleShellConnection(ws) {
   });
   
   ws.on('close', () => {
+    if (shellProcess) {
+      auditLog('shell_session_end', {
+        pid: shellProcess.pid
+      });
+    }
     // console.log('🔌 Shell client disconnected');
     if (shellProcess && shellProcess.kill) {
       try {
