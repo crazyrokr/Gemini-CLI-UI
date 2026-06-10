@@ -1057,6 +1057,10 @@ function handleShellConnection(ws) {
             shellArgs = isWindows ? ['-Command', geminiCommand] : ['-c', geminiCommand];
           }
 
+          // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+          const filteredEnv = { ...process.env };
+          delete filteredEnv.JWT_SECRET;
+
           // Start shell using PTY for proper terminal emulation
           shellProcess = pty.spawn(shell, shellArgs, {
             name: 'xterm-256color',
@@ -1064,7 +1068,7 @@ function handleShellConnection(ws) {
             rows: data.rows || 24,
             cwd: normalizedProjectPath,
             env: { 
-              ...process.env,
+              ...filteredEnv,
               TERM: 'xterm-256color',
               BROWSER: 'echo "OPEN_URL:"'
             }
@@ -1469,8 +1473,12 @@ async function startServer() {
       console.log('='.repeat(60) + '\n');
     }
 
-    server.listen(PORT, '0.0.0.0', async () => {
-      // console.log(`Gemini CLI UI server running on http://0.0.0.0:${PORT}`);
+    const HOST = process.env.HOST || '127.0.0.1';
+    server.listen(PORT, HOST, async () => {
+      console.log(`\x1b[32m✅ Gemini CLI UI server running on http://${HOST}:${PORT}\x1b[0m`);
+      if (HOST === '0.0.0.0') {
+        console.warn('\x1b[33m⚠️  Warning: Server is binding to 0.0.0.0. This makes it accessible from any device on the network.\x1b[0m');
+      }
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
