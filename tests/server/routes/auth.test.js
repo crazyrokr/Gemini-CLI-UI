@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import supertest from 'supertest';
 
+process.env.JWT_SECRET = 'a'.repeat(32);
+
 vi.mock('../../../server/database/db.js', () => ({
   userDb: {
     hasUsers: vi.fn(),
@@ -34,6 +36,17 @@ vi.mock('../../../server/middleware/auth.js', () => {
   };
 });
 
+vi.mock('../../../server/middleware/rateLimiter.js', () => ({
+  createRateLimiter: () => (req, res, next) => next(),
+}));
+
+vi.mock('../../../server/utils/setupToken.js', () => ({
+  validateSetupToken: vi.fn().mockReturnValue(true),
+  consumeSetupToken: vi.fn(),
+  generateSetupToken: vi.fn().mockReturnValue('mock-setup-token'),
+  getSetupToken: vi.fn().mockReturnValue('mock-setup-token'),
+}));
+
 import { userDb } from '../../../server/database/db.js';
 import bcrypt from 'bcrypt';
 import authRoutes from '../../../server/routes/auth.js';
@@ -52,7 +65,7 @@ describe('Auth Routes', () => {
 
   describe('GET /status', () => {
     it('returns needsSetup: true when no users exist', async () => {
-      userDb.hasUsers.mockReturnValue(false);
+      userDb.hasUsers.mockResolvedValue(false);
       const app = createApp();
       const res = await supertest(app).get('/api/auth/status');
       expect(res.status).toBe(200);
@@ -60,7 +73,7 @@ describe('Auth Routes', () => {
     });
 
     it('returns needsSetup: false when users exist', async () => {
-      userDb.hasUsers.mockReturnValue(true);
+      userDb.hasUsers.mockResolvedValue(true);
       const app = createApp();
       const res = await supertest(app).get('/api/auth/status');
       expect(res.status).toBe(200);
@@ -69,13 +82,14 @@ describe('Auth Routes', () => {
   });
 
   describe('POST /register', () => {
-    it('registers a new user when no users exist', async () => {
+    it('registers a new user when no users exist with valid setup token', async () => {
       userDb.hasUsers.mockReturnValue(false);
       userDb.createUser.mockReturnValue({ id: 1, username: 'admin' });
 
       const app = createApp();
       const res = await supertest(app)
         .post('/api/auth/register')
+        .set('x-setup-token', 'mock-setup-token')
         .send({ username: 'admin', password: 'password123' });
 
       expect(res.status).toBe(200);
@@ -94,6 +108,18 @@ describe('Auth Routes', () => {
 
       expect(res.status).toBe(403);
       expect(res.body.error).toContain('already exists');
+    });
+
+    it('returns 403 when setup token is missing on initial registration', async () => {
+      userDb.hasUsers.mockReturnValue(false);
+
+      const app = createApp();
+      const res = await supertest(app)
+        .post('/api/auth/register')
+        .send({ username: 'admin', password: 'password123' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('setup token');
     });
 
     it('returns 400 when username is missing', async () => {

@@ -13,11 +13,11 @@ build/
 out/
 
 # Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
 
 # IDE and editor files
 .vscode/
@@ -71,7 +71,7 @@ jspm_packages/
 .yarn-integrity
 
 # dotenv environment variables file
-.env.test
+**/.env.test
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -120,14 +120,14 @@ dev_*.log
 *_dev.log
 
 # Test files
-test-*.html
-test-*.js
-test-*.jsx
+**/test-*.html
+**/test-*.js
+**/test-*.jsx
 # *.test.js
 # *.test.jsx
 # *.spec.js
 # *.spec.jsx
-TestApp.jsx
+**/TestApp.jsx
 
 # Project data and sessions (exclude from git)
 projects_data/
@@ -142,8 +142,8 @@ task-to-revamp.md
 
 # AI Debug Helpers
 # Local script to mock AI payload; not required for standard test suite
-test/debug-support.js
-test/prompt.txt
+**/test/debug-support.js
+**/test/prompt.txt
 
 # Opencode trash, 'nul' is intentionally, DO NOT touch nor review.
 nul 

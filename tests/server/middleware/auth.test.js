@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.hoisted(() => {
+  process.env.JWT_SECRET = 'a'.repeat(32);
+});
+
 vi.mock('jsonwebtoken', () => ({
   default: {
     sign: vi.fn(),
@@ -32,7 +36,6 @@ describe('auth middleware', () => {
     };
     mockNext = vi.fn();
     delete process.env.API_KEY;
-    delete process.env.JWT_SECRET;
   });
 
   describe('generateToken', () => {
@@ -43,6 +46,7 @@ describe('auth middleware', () => {
       expect(jwt.sign).toHaveBeenCalledWith(
         { userId: 1, username: 'admin' },
         expect.any(String),
+        { expiresIn: '24h' },
       );
     });
   });
@@ -117,6 +121,17 @@ describe('auth middleware', () => {
       await authenticateToken(mockReq, mockRes, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(403);
+    });
+
+    it('returns 401 for expired token', async () => {
+      const expiredError = new Error('jwt expired');
+      expiredError.name = 'TokenExpiredError';
+      jwt.verify.mockImplementation(() => { throw expiredError; });
+      mockReq.headers['authorization'] = 'Bearer expired-token';
+
+      await authenticateToken(mockReq, mockRes, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(401);
     });
   });
 
