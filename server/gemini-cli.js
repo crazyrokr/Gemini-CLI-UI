@@ -141,10 +141,14 @@ async function spawnGemini(command, options = {}, ws) {
   }
 
   return new Promise((resolve, reject) => {
+    // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+    const filteredEnv = { ...process.env };
+    delete filteredEnv.JWT_SECRET;
+
     const geminiProcess = spawn(geminiPath, args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env }, // Inherit all environment variables
+      env: filteredEnv, 
       shell: process.platform === 'win32' // Required for finding .cmd files on Windows
     });
 

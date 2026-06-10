@@ -537,16 +537,25 @@ router.post('/generate-commit-message', async (req, res) => {
     let stderr = '';
 
 
-    // Secure spawn: Node.js handles argument escaping automatically. 
+    // Secure spawn: Node.js handles argument escaping automatically.
     const isWin = process.platform === 'win32';
-    const gitProcess = spawn('git', ['diff', '--cached', '--', ...validatedFiles], { cwd: projectPath });    
+
+    // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+    const filteredEnv = { ...process.env };
+    delete filteredEnv.JWT_SECRET;
+
+    const gitProcess = spawn('git', ['diff', '--cached', '--', ...validatedFiles], { 
+      cwd: projectPath,
+      env: filteredEnv
+    });
     // We use shell: true on Windows to ensure .cmd/.bat files are found,
     // matching the reliable logic in gemini-cli.js.
     const geminiProcess = spawn(geminiPathString, [
-      '--model', 'gemini-2.5-flash-lite', 
+      '--model', 'gemini-2.5-flash-lite',
       '--prompt', isWin ? `"${instruction}"` : instruction // Quotes required for Windows shell argument parsing would suffice.
-    ], { 
+    ], {
       cwd: projectPath,
+      env: filteredEnv,
       shell: isWin
     });
 
