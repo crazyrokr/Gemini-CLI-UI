@@ -123,10 +123,10 @@ dev_*.log
 test-*.html
 test-*.js
 test-*.jsx
-*.test.js
-*.test.jsx
-*.spec.js
-*.spec.jsx
+# *.test.js
+# *.test.jsx
+# *.spec.js
+# *.spec.jsx
 TestApp.jsx
 
 # Project data and sessions (exclude from git)
