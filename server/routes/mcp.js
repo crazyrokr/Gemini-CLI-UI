@@ -283,8 +283,4 @@ function parseClaudeGetOutput(output) {
   }
 }
 
-export default router;_error: error.message };
-  }
-}
-
 export default router;
