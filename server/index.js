@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 try {
-  const envPath = path.join(__dirname, '../.env');
+  const configPath = process.env.CONFIG_PATH
+  const envPath = configPath ? path.join(configPath, './.env') : path.join(__dirname, '../.env');
   const envFile = fs.readFileSync(envPath, 'utf8');
   envFile.split('\n').forEach(line => {
     const trimmedLine = line.trim();
@@ -87,6 +88,8 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { generateSetupToken, getSetupToken } from './utils/setupToken.js';
+import { auditLog } from './utils/auditLog.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -887,7 +890,9 @@ wss.on('connection', (ws, request) => {
   // Parse URL to get pathname without query parameters
   const urlObj = new URL(url, 'http://localhost');
   const pathname = urlObj.pathname;
-  
+
+  ws._user = request.user;
+
   if (pathname === '/shell') {
     handleShellConnection(ws);
   } else if (pathname === '/ws') {
@@ -958,11 +963,19 @@ function handleShellConnection(ws) {
       
       if (data.type === 'init') {
         // Initialize shell with project path and session info
-        const projectPath = data.projectPath || process.cwd();
+        const projectPath = data.projectPath.replace(/>$/, '') || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
-        const shellType = data.shellType || 'standard';
+        const shellType = data.shellType; // Keep as-provided for fallback logic
         const clientShellPath = data.shellPath; // Specific shell path from UI
+
+        auditLog('shell_session_start', {
+          userId: ws._user?.userId,
+          username: ws._user?.username,
+          projectPath,
+          sessionId,
+          shellType: shellType || 'standard'
+        });
         
         // Use appropriate shell for the platform
         const isWindows = os.platform() === 'win32';
@@ -1024,6 +1037,7 @@ function handleShellConnection(ws) {
                 shellProcess.kill();
               }
             } catch (e) {console.warn("Caught suppressed error:", e.message);}
+            shellProcess = null;
           }
           
           let shellArgs = [];
@@ -1045,6 +1059,10 @@ function handleShellConnection(ws) {
             shellArgs = isWindows ? ['-Command', geminiCommand] : ['-c', geminiCommand];
           }
 
+          // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+          const filteredEnv = { ...process.env };
+          delete filteredEnv.JWT_SECRET;
+
           // Start shell using PTY for proper terminal emulation
           shellProcess = pty.spawn(shell, shellArgs, {
             name: 'xterm-256color',
@@ -1052,7 +1070,7 @@ function handleShellConnection(ws) {
             rows: data.rows || 24,
             cwd: normalizedProjectPath,
             env: { 
-              ...process.env,
+              ...filteredEnv,
               TERM: 'xterm-256color',
               BROWSER: 'echo "OPEN_URL:"'
             }
@@ -1133,6 +1151,11 @@ function handleShellConnection(ws) {
   });
   
   ws.on('close', () => {
+    if (shellProcess) {
+      auditLog('shell_session_end', {
+        pid: shellProcess.pid
+      });
+    }
     // console.log('🔌 Shell client disconnected');
     if (shellProcess && shellProcess.kill) {
       try {
@@ -1440,8 +1463,24 @@ async function startServer() {
     await initializeDatabase();
     // console.log('✅ Database initialization skipped (testing)');
     
-    server.listen(PORT, '0.0.0.0', async () => {
-      // console.log(`Gemini CLI UI server running on http://0.0.0.0:${PORT}`);
+    const hasUsers = await (await import('./database/db.js')).userDb.hasUsers();
+    if (!hasUsers) {
+      const token = generateSetupToken();
+      console.log('\n' + '='.repeat(60));
+      console.log('  SETUP TOKEN (first-time registration)');
+      console.log('  Use this token in the X-Setup-Token header');
+      console.log('  when calling POST /api/auth/register');
+      console.log('');
+      console.log(`  ${token}`);
+      console.log('='.repeat(60) + '\n');
+    }
+
+    const HOST = process.env.HOST || '127.0.0.1';
+    server.listen(PORT, HOST, async () => {
+      console.log(`\x1b[32m✅ Gemini CLI UI server running on http://${HOST}:${PORT}\x1b[0m`);
+      if (HOST === '0.0.0.0') {
+        console.warn('\x1b[33m⚠️  Warning: Server is binding to 0.0.0.0. This makes it accessible from any device on the network.\x1b[0m');
+      }
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3

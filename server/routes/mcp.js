@@ -15,8 +15,13 @@ router.get('/cli/list', async (req, res) => {
   try {
     console.log('📋 Listing MCP servers using Claude CLI');
     
+    // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+    const filteredEnv = { ...process.env };
+    delete filteredEnv.JWT_SECRET;
+    
     const process = spawn('claude', ['mcp', 'list', '-s', 'user'], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: filteredEnv
     });
     
     let stdout = '';
@@ -169,10 +174,13 @@ router.get('/cli/get/:name', async (req, res) => {
     
     console.log('📄 Getting MCP server details using Claude CLI:', name);
     
-    const { spawn } = await import('child_process');
+    // Filter environment variables to prevent leaking sensitive information like JWT_SECRET
+    const filteredEnv = { ...process.env };
+    delete filteredEnv.JWT_SECRET;
     
     const process = spawn('claude', ['mcp', 'get', '-s', 'user', name], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: filteredEnv
     });
     
     let stdout = '';

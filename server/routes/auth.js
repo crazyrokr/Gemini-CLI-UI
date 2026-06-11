@@ -2,11 +2,17 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb } from '../database/db.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
+import { validateSetupToken, consumeSetupToken } from '../utils/setupToken.js';
 
 const router = express.Router();
 
+const statusLimiter = createRateLimiter({ windowMs: 60 * 1000, maxRequests: 30 });
+const registerLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, maxRequests: 5 });
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxRequests: 10 });
+
 // Check auth status and setup requirements
-router.get('/status', async (req, res) => {
+router.get('/status', statusLimiter, async (req, res) => {
   try {
     const hasUsers = await userDb.hasUsers();
     res.json({ 
@@ -20,7 +26,7 @@ router.get('/status', async (req, res) => {
 });
 
 // User registration (setup) - only allowed if no users exist
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
     
@@ -38,14 +44,25 @@ router.post('/register', async (req, res) => {
     if (hasUsers) {
       return res.status(403).json({ error: 'User already exists. This is a single-user system.' });
     }
-    
+
+    if (hasUsers === false) {
+      const setupToken = req.headers['x-setup-token'];
+      if (!setupToken || !validateSetupToken(setupToken)) {
+        return res.status(403).json({
+          error: 'Initial registration requires a valid setup token. Check server logs for the generated token.'
+        });
+      }
+    }
+
     // Hash password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
     
     // Create user
     const user = userDb.createUser(username, passwordHash);
-    
+
+    consumeSetupToken();
+
     // Generate token
     const token = generateToken(user);
     
@@ -69,7 +86,7 @@ router.post('/register', async (req, res) => {
 });
 
 // User login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
     
