@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -7,7 +7,7 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = path.join(__dirname, 'geminicliui_auth.db');
+const DB_PATH = path.join(process.env.CONFIG_PATH || __dirname, 'geminicliui_auth.db');
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
 // Create database connection

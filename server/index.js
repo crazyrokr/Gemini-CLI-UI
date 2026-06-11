@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 try {
-  const envPath = path.join(__dirname, '../.env');
+  const configPath = process.env.CONFIG_PATH
+  const envPath = configPath ? path.join(configPath, './.env') : path.join(__dirname, '../.env');
   const envFile = fs.readFileSync(envPath, 'utf8');
   envFile.split('\n').forEach(line => {
     const trimmedLine = line.trim();
@@ -962,10 +963,10 @@ function handleShellConnection(ws) {
       
       if (data.type === 'init') {
         // Initialize shell with project path and session info
-        const projectPath = data.projectPath || process.cwd();
+        const projectPath = data.projectPath.replace(/>$/, '') || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
-        const shellType = data.shellType || 'standard';
+        const shellType = data.shellType; // Keep as-provided for fallback logic
         const clientShellPath = data.shellPath; // Specific shell path from UI
 
         auditLog('shell_session_start', {
@@ -973,7 +974,7 @@ function handleShellConnection(ws) {
           username: ws._user?.username,
           projectPath,
           sessionId,
-          shellType
+          shellType: shellType || 'standard'
         });
         
         // Use appropriate shell for the platform
@@ -1036,6 +1037,7 @@ function handleShellConnection(ws) {
                 shellProcess.kill();
               }
             } catch (e) {console.warn("Caught suppressed error:", e.message);}
+            shellProcess = null;
           }
           
           let shellArgs = [];
